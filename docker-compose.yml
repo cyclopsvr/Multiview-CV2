@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  multiview-detection:
+    build: .
+    container_name: multiview-detection-system
+    ports:
+      - "5001:5000"
+    volumes:
+      - /dev:/dev  # For camera access
+    devices:
+      - /dev/video0:/dev/video0  # MacBook Pro Camera
+      - /dev/video1:/dev/video1  # HERO11 Black (if available)
+      - /dev/video2:/dev/video2  # Insta360 X3 (if available)
+      - /dev/video3:/dev/video3  # OBS Virtual Camera (if available)
+    privileged: true  # Required for camera access
+    environment:
+      - FLASK_ENV=production
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    networks:
+      - detection-network
+
+networks:
+  detection-network:
+    driver: bridge
