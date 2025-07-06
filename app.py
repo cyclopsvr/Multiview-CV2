@@ -12,6 +12,7 @@ from flask import Flask, render_template, jsonify
 from flask_socketio import SocketIO, emit
 import logging
 from config import Config
+from pose_estimation import YOLOv7PoseEstimator
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -20,6 +21,7 @@ logger = logging.getLogger(__name__)
 class MultiCameraDetectionSystem:
     def __init__(self):
         self.model = YOLO(Config.YOLO_MODEL)
+        self.pose_estimator = YOLOv7PoseEstimator(weights_path="yolov7-w6-pose.pt", device='cpu')
         self.cameras = {}
         # Load camera configs from Config class and detected cameras
         self.camera_configs = self.load_camera_configs()
@@ -180,15 +182,24 @@ class MultiCameraDetectionSystem:
                 logger.warning(f"Failed to read from camera {camera_id}")
                 continue
             
-            # Run detection
+            # Run object detection
             detections = self.detect_objects(frame, camera_id)
             
-            # Draw detections
+            # Run pose estimation for person detections
+            poses = []
+            person_detections = [d for d in detections if d['class'] == 'person']
+            if person_detections:
+                poses = self.pose_estimator.detect_poses(frame)
+            
+            # Draw detections and poses
             frame_with_detections = self.draw_detections(frame.copy(), detections)
+            if poses:
+                frame_with_detections = self.pose_estimator.draw_poses(frame_with_detections, poses)
             
             # Store detection results
             self.detection_results[camera_id] = {
                 'detections': detections,
+                'poses': poses,
                 'timestamp': time.time(),
                 'camera_name': camera['name']
             }
@@ -202,7 +213,8 @@ class MultiCameraDetectionSystem:
                 'camera_id': camera_id,
                 'camera_name': camera['name'],
                 'frame': frame_base64,
-                'detections': detections
+                'detections': detections,
+                'poses': poses
             })
             
             time.sleep(0.033)  # ~30 FPS
